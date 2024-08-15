@@ -4,13 +4,17 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc && node index.js"
   },
+  "type": "module",
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "inquirer": "^10.1.8",
+    "inquirer": "^9.2.23",
     "typescript": "^5.5.4"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7"
   }
 }
