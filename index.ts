@@ -99,7 +99,7 @@ class BangDiceGame {
     initPlayers(num: number) {
         const roles = this.getRoles(num);
         this.players = roles.map((role, i) => new Player(`Player ${i + 1}`, role));
-        this.currentPlayerIndex = this.players.findIndex(player => player.role === Roles.SHERIFF) - 1;
+        this.currentPlayerIndex = this.players.findIndex(player => player.role === Roles.SHERIFF);
     }
 
     printPlayers() {
@@ -111,8 +111,8 @@ class BangDiceGame {
     }
 
     private addArrowToCurrentPlayer() {
+        if (this.turnIsFinished) return;
         const currentPlayer = this.getCurrentPlayer();
-        if (currentPlayer.life <= 0) return;
         currentPlayer.addArrow();
         this.arrowCount--;
 
@@ -138,14 +138,12 @@ class BangDiceGame {
         this.dices = Array.from({ length: 5 }, () => new Dice());
         this.rollsLeft = 2;
         this.rollDices();
-        this.checkDynamite();
 
         while (this.rollsLeft > 0 && !this.turnIsFinished) {
             console.log(`Rolls left: ${this.rollsLeft}`);
             await this.promptDiceSelection();
-            this.rollDices();
-            this.checkDynamite();
             this.rollsLeft--;
+            this.rollDices();
         }
 
         if (!this.turnIsFinished) {
@@ -193,7 +191,7 @@ class BangDiceGame {
             {
                 type: 'list',
                 name: 'player',
-                message: 'Select player to shoot:',
+                message: `Select player to shoot (${DiceFaces[die]}):`,
                 choices: targets.map(target => ({ name: target.name, value: target }))
             },
         ]);
@@ -299,9 +297,7 @@ class BangDiceGame {
                 this.addArrowToCurrentPlayer();
             }
         });
-    }
 
-    private checkDynamite() {
         const dynamiteCount = this.countDiceFaces(DiceFaces.DYNAMITE);
         if (dynamiteCount >= 3) {
             console.log(`Dynamite explodes! ${this.getCurrentPlayer().name} loses a life!`);
@@ -340,11 +336,11 @@ class BangDiceGame {
 
     async startGame() {
         while (!this.isFinished) {
+            await this.handleTurn();
+            this.printPlayers();
             do {
                 this.currentPlayerIndex = (this.currentPlayerIndex + 1 + this.players.length) % this.players.length;
             } while (this.players[this.currentPlayerIndex].life <= 0);
-            await this.handleTurn();
-            this.printPlayers();
         }
     }
 
