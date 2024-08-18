@@ -106,13 +106,13 @@ class BangDiceGame {
         this.players.forEach(player => player.printInfo());
     }
 
-    private getCurrentPlayer(): Player {
+    private get currentPlayer(): Player {
         return this.players[this.currentPlayerIndex];
     }
 
     private addArrowToCurrentPlayer() {
         if (this.turnIsFinished) return;
-        const currentPlayer = this.getCurrentPlayer();
+        const currentPlayer = this.currentPlayer;
         currentPlayer.addArrow();
         this.arrowCount--;
 
@@ -133,7 +133,7 @@ class BangDiceGame {
     }
 
     private async handleTurn() {
-        const currentPlayer = this.getCurrentPlayer();
+        const currentPlayer = this.currentPlayer;
         console.log(`Current Player: ${currentPlayer.name}`);
         this.dices = Array.from({ length: 5 }, () => new Dice());
         this.rollsLeft = 2;
@@ -165,17 +165,18 @@ class BangDiceGame {
         const shootingDistance = die === DiceFaces.SHOOT_2 ? 2 : 1;
         const alivePlayers = this.alivePlayers();
         const numAlivePlayers = alivePlayers.length;
+        const currentPlayerIdx = this.alivePlayers().findIndex(player => player === this.currentPlayer);
 
-        const forwardTargetIndex = (this.currentPlayerIndex + shootingDistance) % numAlivePlayers;
-        const backwardTargetIndex = (this.currentPlayerIndex - shootingDistance + numAlivePlayers) % numAlivePlayers;
+        const forwardTargetIndex = (currentPlayerIdx + shootingDistance) % numAlivePlayers;
+        const backwardTargetIndex = (currentPlayerIdx- shootingDistance + numAlivePlayers) % numAlivePlayers;
 
         const targets = new Set<Player>();
 
-        if (alivePlayers[forwardTargetIndex] !== this.getCurrentPlayer()) {
+        if (currentPlayerIdx !== forwardTargetIndex) {
             targets.add(alivePlayers[forwardTargetIndex]);
         }
 
-        if (alivePlayers[backwardTargetIndex] !== this.getCurrentPlayer()) {
+        if (currentPlayerIdx !== backwardTargetIndex) {
             targets.add(alivePlayers[backwardTargetIndex]);
         }
 
@@ -240,7 +241,7 @@ class BangDiceGame {
     private resolveBeer() {
         const beerCount = this.countDiceFaces(DiceFaces.BEER);
         if (beerCount > 0) {
-            const currentPlayer = this.getCurrentPlayer();
+            const currentPlayer = this.currentPlayer;
             currentPlayer.heal(beerCount);
             console.log(`${currentPlayer.name} heals for ${beerCount} HP`);
         }
@@ -249,7 +250,7 @@ class BangDiceGame {
     private resolveGatling() {
         const gatlingCount = this.countDiceFaces(DiceFaces.GATLING);
         if (gatlingCount >= 3) {
-            const currentPlayer = this.getCurrentPlayer();
+            const currentPlayer = this.currentPlayer;
             console.log(`Gatling! Everyone except ${currentPlayer.name} loses a life. ${currentPlayer.name} loses all their arrows.`);
 
             this.players.forEach(player => {
@@ -300,8 +301,8 @@ class BangDiceGame {
 
         const dynamiteCount = this.countDiceFaces(DiceFaces.DYNAMITE);
         if (dynamiteCount >= 3) {
-            console.log(`Dynamite explodes! ${this.getCurrentPlayer().name} loses a life!`);
-            this.getCurrentPlayer().receiveDamage(1);
+            console.log(`Dynamite explodes! ${this.currentPlayer.name} loses a life!`);
+            this.currentPlayer.receiveDamage(1);
             this.rollsLeft = 0;
         }
     }
@@ -331,7 +332,7 @@ class BangDiceGame {
     }
 
     get turnIsFinished(): boolean {
-        return this.isFinished || this.getCurrentPlayer().life <= 0;
+        return this.isFinished || this.currentPlayer.life <= 0;
     }
 
     async startGame() {
