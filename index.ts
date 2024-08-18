@@ -22,7 +22,7 @@ class Player {
     }
 
     printInfo() {
-        console.log(`${this.name} - ${this.isAlive || this.role === Roles.SHERIFF ? Roles[this.role] : ""} - ${this.life}/${this.maxLife} (Arrows: ${this.arrowCount})`);
+        console.log(`${this.name} - ${!this.isAlive || this.role === Roles.SHERIFF ? Roles[this.role] : "???"} - ${this.life}/${this.maxLife} (Arrows: ${this.arrowCount})`);
     }
 
     get isAlive(): boolean {
@@ -163,14 +163,13 @@ class BangDiceGame {
     }
 
     private getShootingTargets(die: DiceFaces): Player[] {
-        const shootingDistance = die === DiceFaces.SHOOT_2 ? 2 : 1;
         const alivePlayers = this.alivePlayers();
         const numAlivePlayers = alivePlayers.length;
-        const currentPlayerIdx = this.alivePlayers().findIndex(player => player === this.currentPlayer);
+        const shootingDistance = die === DiceFaces.SHOOT_2 && numAlivePlayers > 3 ? 2 : 1;
 
+        const currentPlayerIdx = alivePlayers.findIndex(player => player === this.currentPlayer);
         const forwardTargetIndex = (currentPlayerIdx + shootingDistance) % numAlivePlayers;
         const backwardTargetIndex = (currentPlayerIdx- shootingDistance + numAlivePlayers) % numAlivePlayers;
-
         const targets = new Set<Player>();
 
         if (currentPlayerIdx !== forwardTargetIndex) {
