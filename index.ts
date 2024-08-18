@@ -12,7 +12,7 @@ class Player {
     role: Roles;
     maxLife: number;
     life: number;
-    arrow: number = 0;
+    arrowCount: number = 0;
 
     constructor(name: string, role: Roles) {
         this.name = name;
@@ -22,7 +22,11 @@ class Player {
     }
 
     printInfo() {
-        console.log(`${this.name} - ${Roles[this.role]} - ${this.life}/${this.maxLife} (Arrow: ${this.arrow})`);
+        console.log(`${this.name} - ${this.isAlive || this.role === Roles.SHERIFF ? Roles[this.role] : ""} - ${this.life}/${this.maxLife} (Arrows: ${this.arrowCount})`);
+    }
+
+    get isAlive(): boolean {
+        return this.life > 0;
     }
 
     receiveDamage(damage: number) {
@@ -34,11 +38,11 @@ class Player {
     }
 
     addArrow() {
-        this.arrow += 1;
+        this.arrowCount++;
     }
 
     resetArrows() {
-        this.arrow = 0;
+        this.arrowCount = 0;
     }
 }
 
@@ -46,8 +50,8 @@ enum DiceFaces {
     NONE,
     ARROW,
     DYNAMITE,
-    SHOOT_LEFT,
-    SHOOT_RIGHT,
+    SHOOT_1,
+    SHOOT_2,
     BEER,
     GATLING
 }
@@ -56,8 +60,8 @@ class Dice {
     faces: DiceFaces[] = [
         DiceFaces.ARROW,
         DiceFaces.DYNAMITE,
-        DiceFaces.SHOOT_LEFT,
-        DiceFaces.SHOOT_RIGHT,
+        DiceFaces.SHOOT_1,
+        DiceFaces.SHOOT_2,
         DiceFaces.BEER,
         DiceFaces.GATLING
     ];
@@ -71,7 +75,7 @@ class Dice {
 
 class BangDiceGame {
     players: Player[] = [];
-    arrowLeft: number = 9;
+    arrowCount: number = 9;
     isFinished: boolean = false;
     currentPlayerIndex: number = -1;
     dices: Dice[] = [];
@@ -102,48 +106,35 @@ class BangDiceGame {
         this.players.forEach(player => player.printInfo());
     }
 
-    get currentPlayer(): Player {
+    private getCurrentPlayer(): Player {
         return this.players[this.currentPlayerIndex];
     }
 
-    private findPlayerIndex(start: number, dir: number) {
-        let _currentIndex = start;
-        do {
-            _currentIndex = (_currentIndex + dir + this.players.length) % this.players.length;
-            console.log(_currentIndex);
-        } while (this.players[_currentIndex].life <= 0);
-        return _currentIndex;
-    }
-
-    private nextPlayerIndex() {
-        return this.findPlayerIndex(this.currentPlayerIndex, 1);
-    }
-
-    private prevPlayerIndex() {
-        return this.findPlayerIndex(this.currentPlayerIndex, -1);
-    }
-
     private addArrowToCurrentPlayer() {
-        this.currentPlayer.addArrow();
-        this.arrowLeft -= 1;
-        console.log(`${this.currentPlayer.name} gains an arrow!`);
+        const currentPlayer = this.getCurrentPlayer();
+        if (currentPlayer.life <= 0) return;
+        currentPlayer.addArrow();
+        this.arrowCount--;
 
-        if (this.arrowLeft <= 0) {
-            this.resolveArrowRain();
+        console.log(`${currentPlayer.name} gains an arrow!`);
+
+        if (this.arrowCount <= 0) {
+            this.resolveIndianAttack();
         }
     }
 
-    private resolveArrowRain() {
+    private resolveIndianAttack() {
         this.players.forEach(player => {
-            player.receiveDamage(player.arrow);
+            player.receiveDamage(player.arrowCount);
             player.resetArrows();
         });
 
-        this.arrowLeft = 9;
+        this.arrowCount = 9;
     }
 
     private async handleTurn() {
-        console.log(`Current Player: ${this.currentPlayer.name}`);
+        const currentPlayer = this.getCurrentPlayer();
+        console.log(`Current Player: ${currentPlayer.name}`);
         this.dices = Array.from({ length: 5 }, () => new Dice());
         this.rollsLeft = 2;
         this.rollDices();
@@ -157,82 +148,140 @@ class BangDiceGame {
             this.rollsLeft--;
         }
 
-        if (this.turnIsFinished) return;
-
-        this.resolveShooting();
-        if (this.turnIsFinished) return;
-
-        this.resolveBeer();
-        if (this.turnIsFinished) return;
-
-        this.resolveGatling();
+        if (!this.turnIsFinished) {
+            await this.resolveShooting();
+        }
+        if (!this.turnIsFinished) {
+            this.resolveBeer();
+        }
+        if (!this.turnIsFinished) {
+            this.resolveGatling();
+        }
     }
 
-    private resolveShooting() {
-        const shootLeft = this.dices.filter(dice => dice.value === DiceFaces.SHOOT_LEFT).length;
-        const playerLeft = this.players[this.prevPlayerIndex()];
-        playerLeft.receiveDamage(shootLeft);
-        if (shootLeft > 0) {
-            console.log(`${playerLeft.name} takes ${shootLeft} damage`);
-            this.checkIsAlive(playerLeft);
+    private alivePlayers() {
+        return this.players.filter(player => player.isAlive);
+    }
+
+    private getShootingTargets(die: DiceFaces): Player[] {
+        const shootingDistance = die === DiceFaces.SHOOT_2 ? 2 : 1;
+        const alivePlayers = this.alivePlayers();
+        const numAlivePlayers = alivePlayers.length;
+
+        const forwardTargetIndex = (this.currentPlayerIndex + shootingDistance) % numAlivePlayers;
+        const backwardTargetIndex = (this.currentPlayerIndex - shootingDistance + numAlivePlayers) % numAlivePlayers;
+
+        const targets = new Set<Player>();
+
+        if (alivePlayers[forwardTargetIndex] !== this.getCurrentPlayer()) {
+            targets.add(alivePlayers[forwardTargetIndex]);
         }
 
-        const shootRight = this.dices.filter(dice => dice.value === DiceFaces.SHOOT_RIGHT).length;
-        const playerRight = this.players[this.nextPlayerIndex()];
-        playerRight.receiveDamage(shootRight);
-        if (shootRight > 0) {
-            console.log(`${playerRight.name} takes ${shootRight} damage`);
-            this.checkIsAlive(playerRight);
+        if (alivePlayers[backwardTargetIndex] !== this.getCurrentPlayer()) {
+            targets.add(alivePlayers[backwardTargetIndex]);
+        }
+
+        return [...targets];
+    }
+
+    private async chooseTarget(die: DiceFaces) {
+        const targets = this.getShootingTargets(die);
+        if (targets.length === 1) {
+            return targets[0];
+        }
+        const { player } = await inquirer.prompt([
+            {
+                type: 'list',
+                name: 'player',
+                message: 'Select player to shoot:',
+                choices: targets.map(target => ({ name: target.name, value: target }))
+            },
+        ]);
+        return player;
+    }
+
+    private async resolveShooting() {
+        let targets = new Map<Player, number>();
+        const shootOne = this.countDiceFaces(DiceFaces.SHOOT_1);
+
+        for (let i = 0; i < shootOne; i++) {
+            const target = await this.chooseTarget(DiceFaces.SHOOT_1);
+            const dmg = (targets.get(target) || 0) + 1;
+            targets.set(target, dmg);
+        }
+
+        const shootTwo = this.countDiceFaces(DiceFaces.SHOOT_2);
+
+        for (let i = 0; i < shootTwo; i++) {
+            const target = await this.chooseTarget(DiceFaces.SHOOT_2);
+            const dmg = (targets.get(target) || 0) + 1;
+            targets.set(target, dmg);
+        }
+        for (const [player, dmg] of targets.entries()) {
+            this.shootPlayer(player, dmg);
+        }
+    }
+
+    private shootPlayer(player: Player, damage: number) {
+        if (damage > 0) {
+            player.receiveDamage(damage);
+            console.log(`${player.name} takes ${damage} damage`);
+            this.checkIsAlive(player);
         }
     }
 
     private checkIsAlive(player: Player) {
         if (player.life <= 0) {
-            console.log(`${player.name} died!`)
-            this.arrowLeft += player.arrow;
+            console.log(`${player.name} died!`);
+            this.arrowCount += player.arrowCount;
             player.resetArrows();
             this.checkEndGame();
         }
     }
 
     private resolveBeer() {
-        const beerCount = this.dices.filter(dice => dice.value === DiceFaces.BEER).length;
-        this.currentPlayer.heal(beerCount);
-        console.log(`${this.currentPlayer.name} heals for ${beerCount} HP`);
+        const beerCount = this.countDiceFaces(DiceFaces.BEER);
+        if (beerCount > 0) {
+            const currentPlayer = this.getCurrentPlayer();
+            currentPlayer.heal(beerCount);
+            console.log(`${currentPlayer.name} heals for ${beerCount} HP`);
+        }
     }
 
     private resolveGatling() {
-        const gatlingCount = this.dices.filter(dice => dice.value === DiceFaces.GATLING).length;
-        if (gatlingCount > 2) {
-            console.log(`Gatling! Everyone except ${this.currentPlayer.name} loses a life. ${this.currentPlayer.name} loses all their arrows.`);
+        const gatlingCount = this.countDiceFaces(DiceFaces.GATLING);
+        if (gatlingCount >= 3) {
+            const currentPlayer = this.getCurrentPlayer();
+            console.log(`Gatling! Everyone except ${currentPlayer.name} loses a life. ${currentPlayer.name} loses all their arrows.`);
+
             this.players.forEach(player => {
-                if (player !== this.currentPlayer && player.life > 0) {
+                if (player !== currentPlayer && player.isAlive) {
                     player.receiveDamage(1);
                     this.checkIsAlive(player);
                 }
             });
-            this.arrowLeft += this.currentPlayer.arrow;
-            this.currentPlayer.resetArrows();
+
+            this.arrowCount += currentPlayer.arrowCount;
+            currentPlayer.resetArrows();
             this.checkEndGame();
         }
     }
 
     private checkEndGame() {
         const sheriff = this.players.find(player => player.role === Roles.SHERIFF);
-        const badGuys = this.players.filter(player => 
-            (player.role === Roles.OUTLAW || player.role === Roles.RENEGADE) && player.life > 0
+        const badGuys = this.players.filter(player =>
+            (player.role === Roles.OUTLAW || player.role === Roles.RENEGADE) && player.isAlive
         );
 
-        if (sheriff!.life <= 0) {
-            const alivePlayers = this.players.filter(player => player.life > 0);
-            if (alivePlayers.length === 1 && alivePlayers[0].role === Roles.RENEGADE) {
-                console.log(`Game over! Renegade wins!`);
-            } else {
-                console.log(`Game over! Outlaws win!`);
-            }
+        if (!sheriff?.isAlive) {
+            const alivePlayers = this.players.filter(player => player.isAlive);
+            const winner = alivePlayers.length === 1 && alivePlayers[0].role === Roles.RENEGADE
+                ? "Renegade"
+                : "Outlaws";
+            console.log(`Game over! ${winner} win!`);
             this.isFinished = true;
         } else if (badGuys.length === 0) {
-            console.log(`Game over! The Law wins!`);
+            console.log(`Game over! The Law win!`);
             this.isFinished = true;
         }
     }
@@ -253,12 +302,16 @@ class BangDiceGame {
     }
 
     private checkDynamite() {
-        const dynamiteCount = this.dices.filter(dice => dice.value === DiceFaces.DYNAMITE).length;
-        if (dynamiteCount > 2) {
-            console.log(`Dynamite explodes! ${this.currentPlayer.name} loses a life!`);
-            this.currentPlayer.receiveDamage(1);
+        const dynamiteCount = this.countDiceFaces(DiceFaces.DYNAMITE);
+        if (dynamiteCount >= 3) {
+            console.log(`Dynamite explodes! ${this.getCurrentPlayer().name} loses a life!`);
+            this.getCurrentPlayer().receiveDamage(1);
             this.rollsLeft = 0;
         }
+    }
+
+    private countDiceFaces(face: DiceFaces): number {
+        return this.dices.filter(dice => dice.value === face).length;
     }
 
     private async promptDiceSelection() {
@@ -282,16 +335,19 @@ class BangDiceGame {
     }
 
     get turnIsFinished(): boolean {
-        return this.isFinished || this.currentPlayer?.life <= 0;
+        return this.isFinished || this.getCurrentPlayer().life <= 0;
     }
 
     async startGame() {
         while (!this.isFinished) {
-            this.currentPlayerIndex = this.nextPlayerIndex();
+            do {
+                this.currentPlayerIndex = (this.currentPlayerIndex + 1 + this.players.length) % this.players.length;
+            } while (this.players[this.currentPlayerIndex].life <= 0);
             await this.handleTurn();
             this.printPlayers();
         }
     }
+
 }
 
 async function main() {
