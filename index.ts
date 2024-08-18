@@ -119,13 +119,14 @@ class BangDiceGame {
         console.log(`${currentPlayer.name} gains an arrow!`);
 
         if (this.arrowCount <= 0) {
+            console.log(`Indian ATTACK!`);
             this.resolveIndianAttack();
         }
     }
 
     private resolveIndianAttack() {
         this.players.forEach(player => {
-            player.receiveDamage(player.arrowCount);
+            this.receiveDamage(player, player.arrowCount);
             player.resetArrows();
         });
 
@@ -217,11 +218,11 @@ class BangDiceGame {
             targets.set(target, dmg);
         }
         for (const [player, dmg] of targets.entries()) {
-            this.shootPlayer(player, dmg);
+            this.receiveDamage(player, dmg);
         }
     }
 
-    private shootPlayer(player: Player, damage: number) {
+    private receiveDamage(player: Player, damage: number) {
         if (damage > 0) {
             player.receiveDamage(damage);
             console.log(`${player.name} takes ${damage} damage`);
@@ -255,8 +256,7 @@ class BangDiceGame {
 
             this.players.forEach(player => {
                 if (player !== currentPlayer && player.isAlive) {
-                    player.receiveDamage(1);
-                    this.checkIsAlive(player);
+                    this.receiveDamage(player, 1);
                 }
             });
 
@@ -301,8 +301,8 @@ class BangDiceGame {
 
         const dynamiteCount = this.countDiceFaces(DiceFaces.DYNAMITE);
         if (dynamiteCount >= 3) {
-            console.log(`Dynamite explodes! ${this.currentPlayer.name} loses a life!`);
-            this.currentPlayer.receiveDamage(1);
+            console.log(`Dynamite explodes!`);
+            this.receiveDamage(this.currentPlayer, 1);
             this.rollsLeft = 0;
         }
     }
