@@ -169,27 +169,27 @@ class BangDiceGame {
 
     private getShootingTargets(die: DiceFaces): Player[] {
         const alivePlayers = this.alivePlayers();
-        const numAlivePlayers = alivePlayers.length;
-        const shootingDistance = die === DiceFaces.SHOOT_2 && numAlivePlayers > 3 ? 2 : 1;
-
+        const shootingDistances = die === DiceFaces.SHOOT_2 && alivePlayers.length > 3 ? [2] : [1];
         const currentPlayerIdx = alivePlayers.findIndex(player => player === this.currentPlayer);
-        const forwardTargetIndex = (currentPlayerIdx + shootingDistance) % numAlivePlayers;
-        const backwardTargetIndex = (currentPlayerIdx- shootingDistance + numAlivePlayers) % numAlivePlayers;
+        
         const targets = new Set<Player>();
-
-        if (currentPlayerIdx !== forwardTargetIndex) {
-            targets.add(alivePlayers[forwardTargetIndex]);
-        }
-
-        if (currentPlayerIdx !== backwardTargetIndex) {
-            targets.add(alivePlayers[backwardTargetIndex]);
+        for (const distance of shootingDistances) {
+            const indices = [
+                (currentPlayerIdx + distance) % alivePlayers.length,
+                (currentPlayerIdx - distance + alivePlayers.length) % alivePlayers.length
+            ];
+          
+            indices.forEach(idx => {
+                if (idx !== currentPlayerIdx) {
+                    targets.add(alivePlayers[idx]);
+                }
+            });
         }
 
         return [...targets];
     }
 
-    private async chooseTarget(die: DiceFaces) {
-        const targets = this.getShootingTargets(die);
+    private async chooseTarget(die: DiceFaces, targets: Player[]) {
         if (targets.length === 1) {
             return targets[0];
         }
@@ -205,24 +205,21 @@ class BangDiceGame {
     }
 
     private async resolveShooting() {
-        let targets = new Map<Player, number>();
-        const shootOne = this.countDiceFaces(DiceFaces.SHOOT_1);
+        const targets = new Map<Player, number>();
 
-        for (let i = 0; i < shootOne; i++) {
-            const target = await this.chooseTarget(DiceFaces.SHOOT_1);
-            const dmg = (targets.get(target) || 0) + 1;
-            targets.set(target, dmg);
+        for (const die of [DiceFaces.SHOOT_1, DiceFaces.SHOOT_2]) {
+          const count = this.countDiceFaces(die);
+          if (count == 0) continue;
+
+          const shootingTargets = this.getShootingTargets(die);
+          for (let i = 0; i < count; i++) {
+            const target = await this.chooseTarget(die, shootingTargets);
+            targets.set(target, (targets.get(target) || 0) + 1);
+          }
         }
 
-        const shootTwo = this.countDiceFaces(DiceFaces.SHOOT_2);
-
-        for (let i = 0; i < shootTwo; i++) {
-            const target = await this.chooseTarget(DiceFaces.SHOOT_2);
-            const dmg = (targets.get(target) || 0) + 1;
-            targets.set(target, dmg);
-        }
-        for (const [player, dmg] of targets.entries()) {
-            this.receiveDamage(player, dmg);
+        for (const [player, dmg] of targets) {
+          this.receiveDamage(player, dmg);
         }
     }
 
@@ -243,12 +240,20 @@ class BangDiceGame {
         }
     }
 
-    private resolveBeer() {
-        const beerCount = this.countDiceFaces(DiceFaces.BEER);
-        if (beerCount > 0) {
-            const currentPlayer = this.currentPlayer;
-            currentPlayer.heal(beerCount);
-            console.log(`${currentPlayer.name} heals for ${beerCount} HP`);
+    private async resolveBeer() {
+        const count = this.countDiceFaces(DiceFaces.BEER);
+        if (count == 0) return;
+
+        const targets = new Map<Player, number>();
+        const beerTargets = this.alivePlayers();
+        for (let i = 0; i < count; i++) {
+            const target = await this.chooseTarget(DiceFaces.BEER, beerTargets);
+            targets.set(target, (targets.get(target) || 0) + 1);
+        }
+
+        for (const [player, beerCount] of targets) {
+            player.heal(beerCount);
+            console.log(`${player.name} heals for ${beerCount} HP`);
         }
     }
 
