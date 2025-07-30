@@ -37,8 +37,8 @@ class Player {
         this.life = Math.min(this.life + amount, this.maxLife);
     }
 
-    addArrow() {
-        this.arrowCount++;
+    addArrow(count: number = 1) {
+        this.arrowCount += count;
     }
 
     resetArrows() {
@@ -110,17 +110,22 @@ class BangDiceGame {
         return this.players[this.currentPlayerIndex];
     }
 
-    private addArrowToCurrentPlayer() {
-        if (this.turnIsFinished) return;
+    private addArrowToCurrentPlayer(arrowsToAdd: number) {
+        if (this.turnIsFinished || arrowsToAdd == 0) return;
         const currentPlayer = this.currentPlayer;
-        currentPlayer.addArrow();
-        this.arrowCount--;
-
-        console.log(`${currentPlayer.name} gains an arrow!`);
-
-        if (this.arrowCount <= 0) {
+        if (arrowsToAdd >= this.arrowCount) {
+            const arrowsAvailable = this.arrowCount;
+            const remainingToAdd = arrowsToAdd - arrowsAvailable;
+            console.log(`${currentPlayer.name} gains ${arrowsAvailable} ${arrowsAvailable === 1 ? 'arrow' : 'arrows'}!`);
+            currentPlayer.addArrow(arrowsAvailable);
+            this.arrowCount = 0;
             console.log(`Indian ATTACK!`);
             this.resolveIndianAttack();
+            this.addArrowToCurrentPlayer(remainingToAdd);
+        } else {
+            console.log(`${currentPlayer.name} gains ${arrowsToAdd} ${arrowsToAdd === 1 ? 'arrow' : 'arrows'}!`);
+            currentPlayer.addArrow(arrowsToAdd);
+            this.arrowCount -= arrowsToAdd;
         }
     }
 
@@ -147,14 +152,14 @@ class BangDiceGame {
             this.rollDices();
         }
 
-        if (!this.turnIsFinished) {
-            await this.resolveShooting();
-        }
-        if (!this.turnIsFinished) {
-            this.resolveBeer();
-        }
-        if (!this.turnIsFinished) {
-            this.resolveGatling();
+        const actions: Array<() => Promise<void> | void> = [
+            () => this.resolveShooting(),
+            () => this.resolveBeer(),
+            () => this.resolveGatling()
+        ];
+        for (const action of actions) {
+            if (this.turnIsFinished) break;
+            await action();
         }
     }
 
@@ -292,11 +297,9 @@ class BangDiceGame {
         });
         console.log('Rolled Dices:', this.dices.map(dice => DiceFaces[dice.value]));
 
-        this.dices.forEach(dice => {
-            if (dice.value === DiceFaces.ARROW) {
-                this.addArrowToCurrentPlayer();
-            }
-        });
+        const arrowCount = this.dices.filter(dice => 
+            dice.value === DiceFaces.ARROW && !dice.isHeld).length;
+        this.addArrowToCurrentPlayer(arrowCount);
 
         const dynamiteCount = this.countDiceFaces(DiceFaces.DYNAMITE);
         if (dynamiteCount >= 3) {
