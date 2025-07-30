@@ -37,12 +37,8 @@ class Player {
         this.life = Math.min(this.life + amount, this.maxLife);
     }
 
-    addArrow(count: number = 1) {
+    addArrows(count: number = 1) {
         this.arrowCount += count;
-    }
-
-    resetArrows() {
-        this.arrowCount = 0;
     }
 }
 
@@ -110,29 +106,26 @@ class BangDiceGame {
         return this.players[this.currentPlayerIndex];
     }
 
-    private addArrowToCurrentPlayer(arrowsToAdd: number) {
-        if (this.turnIsFinished || arrowsToAdd == 0) return;
-        const currentPlayer = this.currentPlayer;
-        if (arrowsToAdd >= this.arrowCount) {
-            const arrowsAvailable = this.arrowCount;
-            const remainingToAdd = arrowsToAdd - arrowsAvailable;
+    private addArrowsToCurrentPlayer(arrowsToAdd: number) {
+        const currentPlayer = this.currentPlayer;    
+        while (arrowsToAdd > 0 && !this.turnIsFinished) {
+            const arrowsAvailable = Math.min(arrowsToAdd, this.arrowCount);
             console.log(`${currentPlayer.name} gains ${arrowsAvailable} ${arrowsAvailable === 1 ? 'arrow' : 'arrows'}!`);
-            currentPlayer.addArrow(arrowsAvailable);
-            this.arrowCount = 0;
-            console.log(`Indian ATTACK!`);
-            this.resolveIndianAttack();
-            this.addArrowToCurrentPlayer(remainingToAdd);
-        } else {
-            console.log(`${currentPlayer.name} gains ${arrowsToAdd} ${arrowsToAdd === 1 ? 'arrow' : 'arrows'}!`);
-            currentPlayer.addArrow(arrowsToAdd);
-            this.arrowCount -= arrowsToAdd;
+            currentPlayer.addArrows(arrowsAvailable);
+            this.arrowCount -= arrowsAvailable;
+            arrowsToAdd -= arrowsAvailable;
+    
+            if (this.arrowCount === 0) {
+                console.log(`Indian ATTACK!`);
+                this.resolveIndianAttack();
+            }
         }
     }
 
     private resolveIndianAttack() {
         this.players.forEach(player => {
             this.receiveDamage(player, player.arrowCount);
-            player.resetArrows();
+            player.addArrows(-player.arrowCount);
         });
 
         this.arrowCount = 9;
@@ -170,23 +163,18 @@ class BangDiceGame {
     private getShootingTargets(die: DiceFaces): Player[] {
         const alivePlayers = this.alivePlayers();
         const shootingDistances = die === DiceFaces.SHOOT_2 && alivePlayers.length > 3 ? [2] : [1];
-        const currentPlayerIdx = alivePlayers.findIndex(player => player === this.currentPlayer);
-        
+        const currentPlayerIdx = alivePlayers.indexOf(this.currentPlayer);
         const targets = new Set<Player>();
+    
         for (const distance of shootingDistances) {
             const indices = [
                 (currentPlayerIdx + distance) % alivePlayers.length,
                 (currentPlayerIdx - distance + alivePlayers.length) % alivePlayers.length
             ];
-          
-            indices.forEach(idx => {
-                if (idx !== currentPlayerIdx) {
-                    targets.add(alivePlayers[idx]);
-                }
-            });
+            indices.forEach(idx => targets.add(alivePlayers[idx]));
         }
 
-        return [...targets];
+        return [...targets].filter(player => player !== this.currentPlayer);
     }
 
     private async chooseTarget(die: DiceFaces, targets: Player[]) {
@@ -235,7 +223,7 @@ class BangDiceGame {
         if (player.life <= 0) {
             console.log(`${player.name} died!`);
             this.arrowCount += player.arrowCount;
-            player.resetArrows();
+            player.addArrows(-player.arrowCount);
             this.checkEndGame();
         }
     }
@@ -270,7 +258,7 @@ class BangDiceGame {
             });
 
             this.arrowCount += currentPlayer.arrowCount;
-            currentPlayer.resetArrows();
+            currentPlayer.addArrows(-currentPlayer.arrowCount);
             this.checkEndGame();
         }
     }
@@ -304,7 +292,7 @@ class BangDiceGame {
 
         const arrowCount = this.dices.filter(dice => 
             dice.value === DiceFaces.ARROW && !dice.isHeld).length;
-        this.addArrowToCurrentPlayer(arrowCount);
+        this.addArrowsToCurrentPlayer(arrowCount);
 
         const dynamiteCount = this.countDiceFaces(DiceFaces.DYNAMITE);
         if (dynamiteCount >= 3) {
